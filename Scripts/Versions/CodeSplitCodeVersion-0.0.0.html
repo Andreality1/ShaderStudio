@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Shader Studio | Alt+Enter to Compile</title>
+    <title>Shader Console System | Editor</title>
     <style>
         body {
             background-color: #050505;
@@ -17,7 +17,7 @@
             overflow: hidden;
         }
 
-        /* Shader Display */
+        /* Shader Display (Left) */
         #canvas-container {
             flex: 1.2; 
             display: flex;
@@ -32,10 +32,10 @@
             width: 90%;
             height: auto;
             border: 1px solid #30363d;
-            box-shadow: 0 0 20px rgba(0, 255, 65, 0.1);
+            box-shadow: 0 0 20px rgba(0, 255, 65, 0.05);
         }
 
-        /* Editor Section */
+        /* Editor Section (Middle) */
         #editor-wrapper {
             flex: 1;
             display: flex;
@@ -47,35 +47,13 @@
         .section-header {
             background: #161b22;
             padding: 10px;
-            font-size: 0.75rem;
+            font-size: 0.8rem;
             text-transform: uppercase;
             letter-spacing: 1px;
             color: #8b949e;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            border-bottom: 1px solid #30363d;
-        }
-
-        .editor-container {
-            display: flex;
-            flex-grow: 1;
-            overflow: hidden;
-            position: relative;
-        }
-
-        #line-numbers {
-            width: 45px;
-            background: #0d1117;
-            color: #484f58;
-            padding: 15px 5px;
-            text-align: right;
-            font-family: 'Cascadia Code', monospace;
-            font-size: 0.9rem;
-            line-height: 1.5;
-            user-select: none;
-            border-right: 1px solid #30363d;
-            overflow: hidden;
         }
 
         textarea {
@@ -89,27 +67,24 @@
             resize: none;
             outline: none;
             line-height: 1.5;
-            white-space: pre;
-            overflow-x: auto;
         }
 
-        .button-group { display: flex; gap: 8px; }
         button {
             background: #238636;
             color: white;
             border: none;
-            padding: 5px 12px;
+            padding: 5px 15px;
             border-radius: 4px;
             cursor: pointer;
             font-weight: bold;
             font-family: inherit;
-            font-size: 0.75rem;
         }
-        button.secondary { background: #30363d; }
 
-        /* Console */
+        button:hover { background: #2ea043; }
+
+        /* Console (Right) */
         #terminal-wrapper {
-            width: 350px;
+            width: 400px;
             display: flex;
             flex-direction: column;
             background: #010409;
@@ -119,13 +94,15 @@
         #terminal {
             flex-grow: 1;
             overflow-y: auto;
-            font-size: 0.8rem;
+            font-size: 0.85rem;
             line-height: 1.4;
         }
 
         .log-entry { display: flex; margin-bottom: 4px; border-left: 3px solid transparent; padding-left: 8px; }
-        .time { color: #484f58; margin-right: 10px; font-size: 0.7rem; }
+        .time { color: #484f58; margin-right: 10px; font-size: 0.75rem; }
         .update { color: #7ee787; font-weight: bold; }
+        .info, .log { color: #58a6ff; }
+        .warn { color: #e3b341; border-left-color: #e3b341; }
         .error { color: #ff7b72; font-weight: bold; border-left-color: #ff7b72; }
 
         ::-webkit-scrollbar { width: 4px; }
@@ -140,30 +117,22 @@
 
     <div id="editor-wrapper">
         <div class="section-header">
-            <span>Fragment Shader (Alt+Enter to Run)</span>
-            <div class="button-group">
-                <button class="secondary" onclick="downloadCurrentFile()">Download HTML</button>
-                <button id="runBtn" onclick="compileShaderFromEditor()">Compile & Run</button>
-            </div>
+            <span>Fragment Shader</span>
+            <button onclick="compileShaderFromEditor()">Compile & Run</button>
         </div>
-        <div class="editor-container">
-            <div id="line-numbers"></div>
-            <textarea id="shaderEditor" spellcheck="false" 
-                oninput="updateLineNumbers()" 
-                onscroll="syncScroll()">precision mediump float;
+        <textarea id="shaderEditor" spellcheck="false">precision mediump float;
 uniform float u_time;
 uniform vec2 u_resolution;
 
 void main() {
     vec2 uv = gl_FragCoord.xy / u_resolution.xy; 
     vec3 color = 0.5 + 0.5 * cos(u_time + uv.xyx + vec3(0, 2, 4));
-    gl_FragColor = vec4(color, 1.0);
+    gl_Color = vec4(color, 1.0); // Try changing this to gl_FragColor to fix error!
 }</textarea>
-        </div>
     </div>
 
     <div id="terminal-wrapper">
-        <div class="section-header">System Output</div>
+        <div class="section-header">Output Console</div>
         <div id="terminal"></div>
     </div>
 
@@ -177,33 +146,15 @@ void main() {
     <script>
         const terminal = document.getElementById('terminal');
         const editor = document.getElementById('shaderEditor');
-        const lineNumbers = document.getElementById('line-numbers');
         const canvas = document.getElementById('shaderCanvas');
         const gl = canvas.getContext('webgl');
         const registry = new Map();
 
         let program, animationId;
-
-        // --- SHORTCUT LISTENER ---
-        editor.addEventListener('keydown', function(e) {
-            if (e.altKey && e.key === 'Enter') {
-                e.preventDefault();
-                compileShaderFromEditor();
-            }
-        });
-
-        // --- LINE NUMBER LOGIC ---
-        function updateLineNumbers() {
-            const lines = editor.value.split('\n');
-            lineNumbers.innerHTML = lines.map((_, i) => i + 1).join('<br>');
-        }
-
-        function syncScroll() {
-            lineNumbers.scrollTop = editor.scrollTop;
-        }
+        let frameCount = 0;
 
         // --- CONSOLE INTERCEPTOR ---
-        const nativeConsole = { log: console.log, error: console.error };
+        const nativeConsole = { log: console.log, warn: console.warn, error: console.error };
         function renderToUI(key, message, level = 'log') {
             if (key && registry.has(key)) {
                 registry.get(key).querySelector('.content').textContent = message;
@@ -216,76 +167,81 @@ void main() {
             }
             terminal.scrollTop = terminal.scrollHeight;
         }
-        console.log = (...args) => { nativeConsole.log(...args); renderToUI(null, args.join(' '), 'log'); };
-        console.error = (...args) => { nativeConsole.error(...args); renderToUI(null, args.join(' '), 'error'); };
-        console.update = (id, msg) => renderToUI(id, msg, 'update');
 
-        // --- DOWNLOAD SYSTEM ---
-        function downloadCurrentFile() {
-            const content = document.documentElement.outerHTML;
-            const blob = new Blob([content], { type: 'text/html' });
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = 'ShaderStudio_Live.html';
-            a.click();
-        }
+        ['log', 'warn', 'error'].forEach(m => {
+            console[m] = (...args) => {
+                nativeConsole[m](...args);
+                renderToUI(null, args.join(' '), m);
+            };
+        });
+        console.update = (id, msg, lvl = 'update') => renderToUI(id, msg, lvl);
 
-        // --- WEBGL ENGINE ---
+        // --- SHADER ENGINE ---
         function createShader(gl, type, source) {
             const shader = gl.createShader(type);
             gl.shaderSource(shader, source);
             gl.compileShader(shader);
             if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-                console.error(gl.getShaderInfoLog(shader));
+                console.error(`GLSL Error:\n${gl.getShaderInfoLog(shader)}`);
                 return null;
             }
             return shader;
         }
 
         function compileShaderFromEditor() {
+            console.log("Compiling pipeline...");
             if (animationId) cancelAnimationFrame(animationId);
-            const vs = createShader(gl, gl.VERTEX_SHADER, document.getElementById('vertexShader').text);
-            const fs = createShader(gl, gl.FRAGMENT_SHADER, editor.value);
+            
+            const vsSource = document.getElementById('vertexShader').text;
+            const fsSource = editor.value;
+
+            const vs = createShader(gl, gl.VERTEX_SHADER, vsSource);
+            const fs = createShader(gl, gl.FRAGMENT_SHADER, fsSource);
+
             if (!vs || !fs) return;
 
-            program = gl.createProgram();
-            gl.attachShader(program, vs);
-            gl.attachShader(program, fs);
-            gl.linkProgram(program);
-            
-            if (gl.getProgramParameter(program, gl.LINK_STATUS)) {
-                gl.useProgram(program);
-                startLoop();
-                console.log("Pipeline Hot-Reloaded.");
-            } else {
-                console.error(gl.getProgramInfoLog(program));
+            const newProgram = gl.createProgram();
+            gl.attachShader(newProgram, vs);
+            gl.attachShader(newProgram, fs);
+            gl.linkProgram(newProgram);
+
+            if (!gl.getProgramParameter(newProgram, gl.LINK_STATUS)) {
+                console.error("Linker Error: " + gl.getProgramInfoLog(newProgram));
+                return;
             }
+
+            program = newProgram;
+            gl.useProgram(program);
+            startLoop();
+            console.log("GPU Update Successful.");
         }
 
         function startLoop() {
             const posBuf = gl.createBuffer();
             gl.bindBuffer(gl.ARRAY_BUFFER, posBuf);
             gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, -1,1, 1,-1, 1,1]), gl.STATIC_DRAW);
+
             const posLoc = gl.getAttribLocation(program, "position");
             gl.enableVertexAttribArray(posLoc);
             gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
 
-            const tLoc = gl.getUniformLocation(program, "u_time");
-            const rLoc = gl.getUniformLocation(program, "u_resolution");
+            const timeLoc = gl.getUniformLocation(program, "u_time");
+            const resLoc = gl.getUniformLocation(program, "u_resolution");
 
             function render(time) {
-                gl.uniform1f(tLoc, time * 0.001);
-                gl.uniform2f(rLoc, canvas.width, canvas.height);
+                frameCount++;
+                gl.uniform1f(timeLoc, time * 0.001);
+                gl.uniform2f(resLoc, canvas.width, canvas.height);
                 gl.drawArrays(gl.TRIANGLES, 0, 6);
-                console.update('gpu-stats', `GLSL Active | Runtime: ${(time/1000).toFixed(1)}s`);
+                
+                console.update('gpu-status', `Pipeline: ACTIVE | Frames: ${frameCount}`);
                 animationId = requestAnimationFrame(render);
             }
             animationId = requestAnimationFrame(render);
         }
 
-        // Init
-        updateLineNumbers();
-        if (gl) compileShaderFromEditor();
+        // Initial Compile
+        compileShaderFromEditor();
     </script>
 </body>
 </html>

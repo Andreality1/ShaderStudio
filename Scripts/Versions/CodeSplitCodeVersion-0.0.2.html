@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Shader Studio | Alt+Enter to Compile</title>
+    <title>Shader Studio | Line Numbers</title>
     <style>
         body {
             background-color: #050505;
@@ -57,6 +57,7 @@
             border-bottom: 1px solid #30363d;
         }
 
+        /* Line Numbering Layout */
         .editor-container {
             display: flex;
             flex-grow: 1;
@@ -65,7 +66,7 @@
         }
 
         #line-numbers {
-            width: 45px;
+            width: 40px;
             background: #0d1117;
             color: #484f58;
             padding: 15px 5px;
@@ -140,17 +141,15 @@
 
     <div id="editor-wrapper">
         <div class="section-header">
-            <span>Fragment Shader (Alt+Enter to Run)</span>
+            <span>Fragment Shader</span>
             <div class="button-group">
                 <button class="secondary" onclick="downloadCurrentFile()">Download HTML</button>
-                <button id="runBtn" onclick="compileShaderFromEditor()">Compile & Run</button>
+                <button onclick="compileShaderFromEditor()">Compile & Run</button>
             </div>
         </div>
         <div class="editor-container">
             <div id="line-numbers"></div>
-            <textarea id="shaderEditor" spellcheck="false" 
-                oninput="updateLineNumbers()" 
-                onscroll="syncScroll()">precision mediump float;
+            <textarea id="shaderEditor" spellcheck="false" oninput="updateLineNumbers()" onscroll="syncScroll()">precision mediump float;
 uniform float u_time;
 uniform vec2 u_resolution;
 
@@ -183,14 +182,6 @@ void main() {
         const registry = new Map();
 
         let program, animationId;
-
-        // --- SHORTCUT LISTENER ---
-        editor.addEventListener('keydown', function(e) {
-            if (e.altKey && e.key === 'Enter') {
-                e.preventDefault();
-                compileShaderFromEditor();
-            }
-        });
 
         // --- LINE NUMBER LOGIC ---
         function updateLineNumbers() {
@@ -226,7 +217,7 @@ void main() {
             const blob = new Blob([content], { type: 'text/html' });
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
-            a.download = 'ShaderStudio_Live.html';
+            a.download = 'ShaderStudio.html';
             a.click();
         }
 
@@ -252,14 +243,8 @@ void main() {
             gl.attachShader(program, vs);
             gl.attachShader(program, fs);
             gl.linkProgram(program);
-            
-            if (gl.getProgramParameter(program, gl.LINK_STATUS)) {
-                gl.useProgram(program);
-                startLoop();
-                console.log("Pipeline Hot-Reloaded.");
-            } else {
-                console.error(gl.getProgramInfoLog(program));
-            }
+            gl.useProgram(program);
+            startLoop();
         }
 
         function startLoop() {
@@ -277,15 +262,14 @@ void main() {
                 gl.uniform1f(tLoc, time * 0.001);
                 gl.uniform2f(rLoc, canvas.width, canvas.height);
                 gl.drawArrays(gl.TRIANGLES, 0, 6);
-                console.update('gpu-stats', `GLSL Active | Runtime: ${(time/1000).toFixed(1)}s`);
-                animationId = requestAnimationFrame(render);
+                requestAnimationFrame(render);
             }
             animationId = requestAnimationFrame(render);
         }
 
         // Init
         updateLineNumbers();
-        if (gl) compileShaderFromEditor();
+        compileShaderFromEditor();
     </script>
 </body>
 </html>
