@@ -106,7 +106,6 @@
             font-size: 0.75rem;
         }
         button.secondary { background: #30363d; }
-        button.save { background: #1f6feb; }
 
         /* Console */
         #terminal-wrapper {
@@ -143,8 +142,7 @@
         <div class="section-header">
             <span>Fragment Shader (Alt+Enter to Run)</span>
             <div class="button-group">
-                <button class="save" onclick="saveAsTxt()">Save .txt</button>
-                <button class="secondary" onclick="exportFullHtml()">Export .html</button>
+                <button class="secondary" onclick="downloadCurrentFile()">Download HTML</button>
                 <button id="runBtn" onclick="compileShaderFromEditor()">Compile & Run</button>
             </div>
         </div>
@@ -186,25 +184,15 @@ void main() {
 
         let program, animationId;
 
-        // --- EDITOR INTERACTION ---
+        // --- SHORTCUT LISTENER ---
         editor.addEventListener('keydown', function(e) {
-            // Tab Key: Insert 4 spaces
-            if (e.key === 'Tab') {
-                e.preventDefault();
-                const start = this.selectionStart;
-                const end = this.selectionEnd;
-                this.value = this.value.substring(0, start) + "    " + this.value.substring(end);
-                this.selectionStart = this.selectionEnd = start + 4;
-                updateLineNumbers();
-            }
-
-            // Alt + Enter: Compile
             if (e.altKey && e.key === 'Enter') {
                 e.preventDefault();
                 compileShaderFromEditor();
             }
         });
 
+        // --- LINE NUMBER LOGIC ---
         function updateLineNumbers() {
             const lines = editor.value.split('\n');
             lineNumbers.innerHTML = lines.map((_, i) => i + 1).join('<br>');
@@ -214,7 +202,7 @@ void main() {
             lineNumbers.scrollTop = editor.scrollTop;
         }
 
-        // --- CONSOLE ---
+        // --- CONSOLE INTERCEPTOR ---
         const nativeConsole = { log: console.log, error: console.error };
         function renderToUI(key, message, level = 'log') {
             if (key && registry.has(key)) {
@@ -232,36 +220,14 @@ void main() {
         console.error = (...args) => { nativeConsole.error(...args); renderToUI(null, args.join(' '), 'error'); };
         console.update = (id, msg) => renderToUI(id, msg, 'update');
 
-        // --- DOWNLOAD & EXPORT SYSTEM ---
-        
-        // Downloads ONLY the shader code as a .txt file
-        function saveAsTxt() {
-            const code = editor.value;
-            const blob = new Blob([code], { type: 'text/plain' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'shader_code.txt';
-            a.click();
-            URL.revokeObjectURL(url);
-            console.log("Shader code saved as .txt");
-        }
-
-        // Downloads the WHOLE file including the editor state
-        function exportFullHtml() {
-            // Update the text in the textarea element before cloning the doc
-            // This ensures the exported HTML has the NEW code pre-written in the box.
-            editor.textContent = editor.value; 
-            
-            const content = "<!DOCTYPE html>\n" + document.documentElement.outerHTML;
+        // --- DOWNLOAD SYSTEM ---
+        function downloadCurrentFile() {
+            const content = document.documentElement.outerHTML;
             const blob = new Blob([content], { type: 'text/html' });
-            const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
-            a.href = url;
+            a.href = URL.createObjectURL(blob);
             a.download = 'ShaderStudio_Live.html';
             a.click();
-            URL.revokeObjectURL(url);
-            console.log("Full project exported as .html");
         }
 
         // --- WEBGL ENGINE ---
@@ -278,8 +244,7 @@ void main() {
 
         function compileShaderFromEditor() {
             if (animationId) cancelAnimationFrame(animationId);
-            const vsSource = document.getElementById('vertexShader').text;
-            const vs = createShader(gl, gl.VERTEX_SHADER, vsSource);
+            const vs = createShader(gl, gl.VERTEX_SHADER, document.getElementById('vertexShader').text);
             const fs = createShader(gl, gl.FRAGMENT_SHADER, editor.value);
             if (!vs || !fs) return;
 
@@ -318,7 +283,7 @@ void main() {
             animationId = requestAnimationFrame(render);
         }
 
-        // Initialize
+        // Init
         updateLineNumbers();
         if (gl) compileShaderFromEditor();
     </script>
