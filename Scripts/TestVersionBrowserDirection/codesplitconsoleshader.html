@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Shader Studio | Hybrid WebGL</title>
+    <title>Shader Studio | WebGL2</title>
     <style>
         body {
             background-color: #050505;
@@ -103,12 +103,10 @@
             cursor: pointer;
             font-weight: bold;
             font-family: inherit;
-            font-size: 0.7rem;
-            white-space: nowrap;
+            font-size: 0.75rem;
         }
         button.secondary { background: #30363d; }
         button.save { background: #1f6feb; }
-        button.open { background: #6e7681; }
 
         /* Console */
         #terminal-wrapper {
@@ -143,26 +141,28 @@
 
     <div id="editor-wrapper">
         <div class="section-header">
-            <span id="version-label">Hybrid Shader Studio</span>
+            <span>WebGL2 Fragment Shader (Alt+Enter)</span>
             <div class="button-group">
-                <button class="open" title="Alt + J" onclick="openFile()">Open File (Alt+J)</button>
                 <button class="save" onclick="saveAsTxt()">Save .txt</button>
-                <button class="secondary" title="Alt + L" onclick="exportFullHtml()">Save As (Alt+L)</button>
-                <button id="runBtn" title="Alt + Enter" onclick="compileShaderFromEditor()">Run (Alt+Enter)</button>
+                <button class="secondary" onclick="exportFullHtml()">Save As</button>
+                <button id="runBtn" onclick="compileShaderFromEditor()">Compile & Run</button>
             </div>
         </div>
         <div class="editor-container">
             <div id="line-numbers"></div>
             <textarea id="shaderEditor" spellcheck="false" 
                 oninput="updateLineNumbers()" 
-                onscroll="syncScroll()">precision mediump float;
+                onscroll="syncScroll()">#version 300 es
+precision mediump float;
+
 uniform float u_time;
 uniform vec2 u_resolution;
+out vec4 fragColor;
 
 void main() {
     vec2 uv = gl_FragCoord.xy / u_resolution.xy; 
     vec3 color = 0.5 + 0.5 * cos(u_time + uv.xyx + vec3(0, 2, 4));
-    gl_FragColor = vec4(color, 1.0);
+    fragColor = vec4(color, 1.0);
 }</textarea>
         </div>
     </div>
@@ -172,8 +172,8 @@ void main() {
         <div id="terminal"></div>
     </div>
 
-    <script id="vertexShader" type="x-shader/x-vertex">
-        attribute vec2 position;
+    <script id="vertexShader" type="x-shader/x-vertex">#version 300 es
+        in vec2 position;
         void main() {
             gl_Position = vec4(position, 0.0, 1.0);
         }
@@ -184,38 +184,17 @@ void main() {
         const editor = document.getElementById('shaderEditor');
         const lineNumbers = document.getElementById('line-numbers');
         const canvas = document.getElementById('shaderCanvas');
-        const versionLabel = document.getElementById('version-label');
         
-        let gl = canvas.getContext('webgl2');
-        let isWebGL2 = true;
-
+        // --- WEBGL2 CONTEXT ---
+        const gl = canvas.getContext('webgl2');
         if (!gl) {
-            gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-            isWebGL2 = false;
-            versionLabel.textContent = "WebGL 1 Mode";
-        } else {
-            versionLabel.textContent = "WebGL 2 Mode";
+            alert("WebGL2 is not supported in this browser.");
         }
 
         const registry = new Map();
         let program, animationId;
 
-        // --- KEYBOARD SHORTCUTS ---
-        window.addEventListener('keydown', function(e) {
-            if (e.altKey && e.key === 'Enter') {
-                e.preventDefault();
-                compileShaderFromEditor();
-            }
-            if (e.altKey && e.key.toLowerCase() === 'l') {
-                e.preventDefault();
-                exportFullHtml();
-            }
-            if (e.altKey && e.key.toLowerCase() === 'j') {
-                e.preventDefault();
-                openFile();
-            }
-        });
-
+        // --- EDITOR INTERACTION ---
         editor.addEventListener('keydown', function(e) {
             if (e.key === 'Tab') {
                 e.preventDefault();
@@ -224,6 +203,11 @@ void main() {
                 this.value = this.value.substring(0, start) + "    " + this.value.substring(end);
                 this.selectionStart = this.selectionEnd = start + 4;
                 updateLineNumbers();
+            }
+
+            if (e.altKey && e.key === 'Enter') {
+                e.preventDefault();
+                compileShaderFromEditor();
             }
         });
 
@@ -234,8 +218,10 @@ void main() {
 
         function syncScroll() {
             lineNumbers.scrollTop = editor.scrollTop;
+            lineNumbers.scrollLeft = editor.scrollLeft;
         }
 
+        // --- CONSOLE ---
         const nativeConsole = { log: console.log, error: console.error };
         function renderToUI(key, message, level = 'log') {
             if (key && registry.has(key)) {
@@ -253,136 +239,121 @@ void main() {
         console.error = (...args) => { nativeConsole.error(...args); renderToUI(null, args.join(' '), 'error'); };
         console.update = (id, msg) => renderToUI(id, msg, 'update');
 
-        // --- FILE HANDLING ---
-        async function openFile() {
-            if ('showOpenFilePicker' in window) {
-                try {
-                    const [handle] = await window.showOpenFilePicker({
-                        types: [{
-                            description: 'Shader or HTML Files',
-                            accept: { 'text/plain': ['.glsl', '.txt'], 'text/html': ['.html'] }
-                        }]
-                    });
-                    const file = await handle.getFile();
-                    const text = await file.text();
-                    
-                    if (file.name.endsWith('.html')) {
-                        const parser = new DOMParser();
-                        const doc = parser.parseFromString(text, 'text/html');
-                        const savedEditor = doc.getElementById('shaderEditor');
-                        if (savedEditor) editor.value = savedEditor.textContent;
-                    } else {
-                        editor.value = text;
-                    }
-                    updateLineNumbers();
-                    compileShaderFromEditor();
-                } catch (err) {}
-            } else {
-                const input = document.createElement('input');
-                input.type = 'file';
-                input.onchange = e => {
-                    const file = e.target.files[0];
-                    const reader = new FileReader();
-                    reader.onload = ev => { editor.value = ev.target.result; updateLineNumbers(); compileShaderFromEditor(); };
-                    reader.readAsText(file);
-                };
-                input.click();
-            }
-        }
-
+        // --- DOWNLOAD & SAVE SYSTEM ---
+        
         function saveAsTxt() {
-            const blob = new Blob([editor.value], { type: 'text/plain' });
+            const code = editor.value;
+            const blob = new Blob([code], { type: 'text/plain' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
-            a.href = url; a.download = 'shader.glsl'; a.click();
+            a.href = url;
+            a.download = 'shader_code.glsl';
+            a.click();
             URL.revokeObjectURL(url);
+            console.log("Shader code exported.");
         }
 
         async function exportFullHtml() {
+            // Persist editor content to DOM for export
             editor.textContent = editor.value; 
             const content = "<!DOCTYPE html>\n" + document.documentElement.outerHTML;
+
             if ('showSaveFilePicker' in window) {
                 try {
                     const handle = await window.showSaveFilePicker({
-                        suggestedName: 'ShaderStudio.html',
-                        types: [{ description: 'HTML File', accept: { 'text/html': ['.html'] } }]
+                        suggestedName: 'ShaderStudio_Live.html',
+                        types: [{
+                            description: 'HTML File',
+                            accept: { 'text/html': ['.html'] }
+                        }]
                     });
                     const writable = await handle.createWritable();
                     await writable.write(content);
                     await writable.close();
-                } catch (err) {}
+                    console.log("Project saved successfully.");
+                } catch (err) {
+                    console.error("Save process interrupted.");
+                }
             } else {
+                // Fallback for browsers without File System Access API
                 const blob = new Blob([content], { type: 'text/html' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
-                a.href = url; a.download = 'ShaderStudio.html'; a.click();
+                a.href = url;
+                a.download = 'ShaderStudio_Live.html';
+                a.click();
                 URL.revokeObjectURL(url);
+                console.log("Fallback: File downloaded.");
             }
         }
 
-        // --- ENGINE ---
+        // --- WEBGL2 ENGINE ---
         function createShader(gl, type, source) {
-            let processedSource = source;
-            if (isWebGL2 && !source.trim().startsWith("#version 300 es")) {
-                if (type === gl.VERTEX_SHADER) {
-                    processedSource = "#version 300 es\n" + source.replace(/attribute/g, 'in').replace(/varying/g, 'out');
-                } else {
-                    processedSource = "#version 300 es\nprecision mediump float;\nout vec4 outFragColor;\n" + 
-                                     source.replace(/varying/g, 'in').replace(/gl_FragColor/g, 'outFragColor');
-                }
-            }
             const shader = gl.createShader(type);
-            gl.shaderSource(shader, processedSource);
+            gl.shaderSource(shader, source);
             gl.compileShader(shader);
             if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-                console.error(gl.getShaderInfoLog(shader)); return null;
+                console.error(gl.getShaderInfoLog(shader));
+                return null;
             }
             return shader;
         }
 
         function compileShaderFromEditor() {
             if (animationId) cancelAnimationFrame(animationId);
-            const vsSource = document.getElementById('vertexShader').textContent;
+            const vsSource = document.getElementById('vertexShader').text;
             const vs = createShader(gl, gl.VERTEX_SHADER, vsSource);
             const fs = createShader(gl, gl.FRAGMENT_SHADER, editor.value);
             if (!vs || !fs) return;
+
             program = gl.createProgram();
             gl.attachShader(program, vs);
             gl.attachShader(program, fs);
             gl.linkProgram(program);
+            
             if (gl.getProgramParameter(program, gl.LINK_STATUS)) {
                 gl.useProgram(program);
                 startLoop();
-                console.log(`Linked (${isWebGL2 ? 'WebGL2' : 'WebGL1'})`);
+                console.log("WebGL2 Pipeline Linked.");
             } else {
                 console.error(gl.getProgramInfoLog(program));
             }
         }
 
         function startLoop() {
-            let vao;
-            if (isWebGL2) { vao = gl.createVertexArray(); gl.bindVertexArray(vao); }
+            // WebGL2 uses VAOs to encapsulate state
+            const vao = gl.createVertexArray();
+            gl.bindVertexArray(vao);
+
             const posBuf = gl.createBuffer();
             gl.bindBuffer(gl.ARRAY_BUFFER, posBuf);
             gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, -1,1, 1,-1, 1,1]), gl.STATIC_DRAW);
+            
             const posLoc = gl.getAttribLocation(program, "position");
             gl.enableVertexAttribArray(posLoc);
             gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
+
             const tLoc = gl.getUniformLocation(program, "u_time");
             const rLoc = gl.getUniformLocation(program, "u_resolution");
+
             function render(time) {
                 gl.viewport(0, 0, canvas.width, canvas.height);
+                gl.clearColor(0, 0, 0, 1);
                 gl.clear(gl.COLOR_BUFFER_BIT);
+
                 gl.uniform1f(tLoc, time * 0.001);
                 gl.uniform2f(rLoc, canvas.width, canvas.height);
-                if (isWebGL2) gl.bindVertexArray(vao);
+                
+                gl.bindVertexArray(vao);
                 gl.drawArrays(gl.TRIANGLES, 0, 6);
-                console.update('gpu-stats', `${isWebGL2 ? 'WebGL2' : 'WebGL1'} | Time: ${(time/1000).toFixed(1)}s`);
+                
+                console.update('gpu-stats', `GLSL v300 es | Runtime: ${(time/1000).toFixed(1)}s`);
                 animationId = requestAnimationFrame(render);
             }
             animationId = requestAnimationFrame(render);
         }
 
+        // Init
         updateLineNumbers();
         if (gl) compileShaderFromEditor();
     </script>

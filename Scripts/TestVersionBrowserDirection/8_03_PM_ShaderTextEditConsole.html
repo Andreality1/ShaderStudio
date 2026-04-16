@@ -103,8 +103,7 @@
             cursor: pointer;
             font-weight: bold;
             font-family: inherit;
-            font-size: 0.7rem;
-            white-space: nowrap;
+            font-size: 0.75rem;
         }
         button.secondary { background: #30363d; }
         button.save { background: #1f6feb; }
@@ -145,10 +144,10 @@
         <div class="section-header">
             <span id="version-label">Hybrid Shader Studio</span>
             <div class="button-group">
-                <button class="open" title="Alt + J" onclick="openFile()">Open File (Alt+J)</button>
+                <button class="open" title="Alt + J" onclick="openFile()">Open File</button>
                 <button class="save" onclick="saveAsTxt()">Save .txt</button>
-                <button class="secondary" title="Alt + L" onclick="exportFullHtml()">Save As (Alt+L)</button>
-                <button id="runBtn" title="Alt + Enter" onclick="compileShaderFromEditor()">Run (Alt+Enter)</button>
+                <button class="secondary" title="Alt + L" onclick="exportFullHtml()">Save As</button>
+                <button id="runBtn" title="Alt + Enter" onclick="compileShaderFromEditor()">Compile & Run</button>
             </div>
         </div>
         <div class="editor-container">
@@ -186,6 +185,7 @@ void main() {
         const canvas = document.getElementById('shaderCanvas');
         const versionLabel = document.getElementById('version-label');
         
+        // --- CONTEXT DETECTION ---
         let gl = canvas.getContext('webgl2');
         let isWebGL2 = true;
 
@@ -200,16 +200,19 @@ void main() {
         const registry = new Map();
         let program, animationId;
 
-        // --- KEYBOARD SHORTCUTS ---
+        // --- EDITOR INTERACTION & SHORTCUTS ---
         window.addEventListener('keydown', function(e) {
+            // Alt + Enter: Compile
             if (e.altKey && e.key === 'Enter') {
                 e.preventDefault();
                 compileShaderFromEditor();
             }
+            // Alt + L: Save As (HTML)
             if (e.altKey && e.key.toLowerCase() === 'l') {
                 e.preventDefault();
                 exportFullHtml();
             }
+            // Alt + J: Open File
             if (e.altKey && e.key.toLowerCase() === 'j') {
                 e.preventDefault();
                 openFile();
@@ -236,6 +239,7 @@ void main() {
             lineNumbers.scrollTop = editor.scrollTop;
         }
 
+        // --- CONSOLE ---
         const nativeConsole = { log: console.log, error: console.error };
         function renderToUI(key, message, level = 'log') {
             if (key && registry.has(key)) {
@@ -253,7 +257,8 @@ void main() {
         console.error = (...args) => { nativeConsole.error(...args); renderToUI(null, args.join(' '), 'error'); };
         console.update = (id, msg) => renderToUI(id, msg, 'update');
 
-        // --- FILE HANDLING ---
+        // --- FILE OPERATIONS ---
+
         async function openFile() {
             if ('showOpenFilePicker' in window) {
                 try {
@@ -266,24 +271,38 @@ void main() {
                     const file = await handle.getFile();
                     const text = await file.text();
                     
-                    if (file.name.endsWith('.html')) {
+                    if (file.type === 'text/html' || file.name.endsWith('.html')) {
+                        // Logic to extract shader code if opening an exported studio file
                         const parser = new DOMParser();
                         const doc = parser.parseFromString(text, 'text/html');
                         const savedEditor = doc.getElementById('shaderEditor');
-                        if (savedEditor) editor.value = savedEditor.textContent;
+                        if (savedEditor) {
+                            editor.value = savedEditor.textContent;
+                        } else {
+                            console.error("No shader data found in HTML file.");
+                        }
                     } else {
                         editor.value = text;
                     }
+                    
                     updateLineNumbers();
                     compileShaderFromEditor();
-                } catch (err) {}
+                    console.log(`Opened: ${file.name}`);
+                } catch (err) {
+                    console.error("Open file cancelled.");
+                }
             } else {
+                // Classic fallback using input element
                 const input = document.createElement('input');
                 input.type = 'file';
                 input.onchange = e => {
                     const file = e.target.files[0];
                     const reader = new FileReader();
-                    reader.onload = ev => { editor.value = ev.target.result; updateLineNumbers(); compileShaderFromEditor(); };
+                    reader.onload = event => {
+                        editor.value = event.target.result;
+                        updateLineNumbers();
+                        compileShaderFromEditor();
+                    };
                     reader.readAsText(file);
                 };
                 input.click();
@@ -291,36 +310,43 @@ void main() {
         }
 
         function saveAsTxt() {
-            const blob = new Blob([editor.value], { type: 'text/plain' });
+            const code = editor.value;
+            const blob = new Blob([code], { type: 'text/plain' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
-            a.href = url; a.download = 'shader.glsl'; a.click();
+            a.href = url;
+            a.download = 'shader.glsl';
+            a.click();
             URL.revokeObjectURL(url);
         }
 
         async function exportFullHtml() {
             editor.textContent = editor.value; 
             const content = "<!DOCTYPE html>\n" + document.documentElement.outerHTML;
+
             if ('showSaveFilePicker' in window) {
                 try {
                     const handle = await window.showSaveFilePicker({
-                        suggestedName: 'ShaderStudio.html',
+                        suggestedName: 'ShaderStudio_Hybrid.html',
                         types: [{ description: 'HTML File', accept: { 'text/html': ['.html'] } }]
                     });
                     const writable = await handle.createWritable();
                     await writable.write(content);
                     await writable.close();
+                    console.log("Project saved via Save As.");
                 } catch (err) {}
             } else {
                 const blob = new Blob([content], { type: 'text/html' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
-                a.href = url; a.download = 'ShaderStudio.html'; a.click();
+                a.href = url;
+                a.download = 'ShaderStudio_Hybrid.html';
+                a.click();
                 URL.revokeObjectURL(url);
             }
         }
 
-        // --- ENGINE ---
+        // --- COMPATIBILITY SHADER WRAPPER ---
         function createShader(gl, type, source) {
             let processedSource = source;
             if (isWebGL2 && !source.trim().startsWith("#version 300 es")) {
@@ -335,7 +361,8 @@ void main() {
             gl.shaderSource(shader, processedSource);
             gl.compileShader(shader);
             if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-                console.error(gl.getShaderInfoLog(shader)); return null;
+                console.error(gl.getShaderInfoLog(shader));
+                return null;
             }
             return shader;
         }
@@ -353,7 +380,7 @@ void main() {
             if (gl.getProgramParameter(program, gl.LINK_STATUS)) {
                 gl.useProgram(program);
                 startLoop();
-                console.log(`Linked (${isWebGL2 ? 'WebGL2' : 'WebGL1'})`);
+                console.log(`Pipeline Linked (${isWebGL2 ? 'WebGL2' : 'WebGL1'})`);
             } else {
                 console.error(gl.getProgramInfoLog(program));
             }
