@@ -33,13 +33,6 @@
             height: auto;
             border: 1px solid #30363d;
             box-shadow: 0 0 20px rgba(0, 255, 65, 0.1);
-            background-color: #000;
-        }
-
-        .canvas-controls {
-            margin-top: 15px;
-            display: flex;
-            gap: 10px;
         }
 
         /* Editor Section */
@@ -105,23 +98,19 @@
             background: #238636;
             color: white;
             border: none;
-            padding: 6px 14px;
+            padding: 5px 12px;
             border-radius: 4px;
             cursor: pointer;
             font-weight: bold;
             font-family: inherit;
-            font-size: 0.75rem;
+            font-size: 0.7rem;
             white-space: nowrap;
-            transition: background 0.2s;
         }
-        button:hover { background: #2ea043; }
         button.secondary { background: #30363d; }
-        button.secondary:hover { background: #3c444d; }
         button.save { background: #1f6feb; }
         button.open { background: #6e7681; }
-        button#pausePlayBtn { width: 100px; background: #8957e5; }
 
-        /* Terminal */
+        /* Terminal Output */
         #terminal-wrapper {
             width: 350px;
             display: flex;
@@ -150,9 +139,6 @@
 
     <div id="canvas-container">
         <canvas id="shaderCanvas" width="720" height="360"></canvas>
-        <div class="canvas-controls">
-            <button id="pausePlayBtn" onclick="togglePause()">Pause</button>
-        </div>
     </div>
 
     <div id="editor-wrapper">
@@ -216,7 +202,6 @@ void main() {
         const lineNumbers = document.getElementById('line-numbers');
         const canvas = document.getElementById('shaderCanvas');
         const versionLabel = document.getElementById('version-label');
-        const pausePlayBtn = document.getElementById('pausePlayBtn');
         
         let gl = canvas.getContext('webgl2');
         let isWebGL2 = true;
@@ -229,19 +214,15 @@ void main() {
 
         const registry = new Map();
         let program, animationId;
-        
-        // Time tracking for Pause/Play
-        let isPaused = false;
-        let startTime = performance.now();
-        let pausedAt = 0;
-        let totalPausedTime = 0;
 
+        // Shortcuts
         window.addEventListener('keydown', (e) => {
             if (e.altKey && e.key === 'Enter') { e.preventDefault(); compileShaderFromEditor(); }
             if (e.altKey && e.key.toLowerCase() === 'l') { e.preventDefault(); exportFullHtml(); }
             if (e.altKey && e.key.toLowerCase() === 'j') { e.preventDefault(); openFile(); }
         });
 
+        // Tab support
         editor.addEventListener('keydown', function(e) {
             if (e.key === 'Tab') {
                 e.preventDefault();
@@ -277,49 +258,60 @@ void main() {
         console.error = (...args) => { nativeConsole.error(...args); renderToUI(null, args.join(' '), 'error'); };
         console.update = (id, msg) => renderToUI(id, msg, 'update');
 
-        // --- PAUSE LOGIC ---
-        function togglePause() {
-            isPaused = !isPaused;
-            if (isPaused) {
-                pausedAt = performance.now();
-                pausePlayBtn.textContent = "Play";
-                pausePlayBtn.style.background = "#238636";
-            } else {
-                totalPausedTime += (performance.now() - pausedAt);
-                pausePlayBtn.textContent = "Pause";
-                pausePlayBtn.style.background = "#8957e5";
-                requestAnimationFrame(renderLoop);
-            }
-        }
+        // --- ENHANCED FILE SAVING WITH EXPLORER DIALOG ---
 
-        // --- FILE HANDLING ---
         async function downloadTxt() {
             if ('showSaveFilePicker' in window) {
                 try {
                     const handle = await window.showSaveFilePicker({
                         suggestedName: 'shader.txt',
-                        types: [{ description: 'Text File', accept: { 'text/plain': ['.txt'] } }]
+                        types: [{
+                            description: 'Text File',
+                            accept: { 'text/plain': ['.txt'] }
+                        }]
                     });
                     const writable = await handle.createWritable();
                     await writable.write(editor.value);
                     await writable.close();
                 } catch (err) { if (err.name !== 'AbortError') console.error(err); }
+            } else {
+                const blob = new Blob([editor.value], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url; a.download = 'shader.txt'; a.click();
+                URL.revokeObjectURL(url);
             }
         }
 
         async function exportFullHtml() {
+            // Ensure editor content is stored in the DOM element for saving
             editor.textContent = editor.value; 
             const content = "<!DOCTYPE html>\n" + document.documentElement.outerHTML;
+            
             if ('showSaveFilePicker' in window) {
                 try {
+                    // Opens explorer to select folder and name file
                     const handle = await window.showSaveFilePicker({
                         suggestedName: 'ShaderStudio_Project.html',
-                        types: [{ description: 'HTML Webpage', accept: { 'text/html': ['.html'] } }]
+                        types: [{ 
+                            description: 'HTML Webpage', 
+                            accept: { 'text/html': ['.html'] } 
+                        }]
                     });
                     const writable = await handle.createWritable();
                     await writable.write(content);
                     await writable.close();
-                } catch (err) { if (err.name !== 'AbortError') console.error(err); }
+                    console.log("Project saved to selected directory.");
+                } catch (err) {
+                    if (err.name !== 'AbortError') console.error("Save failed:", err);
+                }
+            } else {
+                // Fallback for browsers without File System Access API
+                const blob = new Blob([content], { type: 'text/html' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url; a.download = 'ShaderStudio.html'; a.click();
+                URL.revokeObjectURL(url);
             }
         }
 
@@ -327,7 +319,10 @@ void main() {
             if ('showOpenFilePicker' in window) {
                 try {
                     const [handle] = await window.showOpenFilePicker({
-                        types: [{ description: 'Files', accept: { 'text/plain': ['.txt', '.glsl'], 'text/html': ['.html'] } }]
+                        types: [{
+                            description: 'Project Files',
+                            accept: { 'text/plain': ['.txt', '.glsl'], 'text/html': ['.html'] }
+                        }]
                     });
                     const file = await handle.getFile();
                     const text = await file.text();
@@ -336,7 +331,9 @@ void main() {
                         const doc = parser.parseFromString(text, 'text/html');
                         const savedEditor = doc.getElementById('shaderEditor');
                         if (savedEditor) editor.value = savedEditor.value || savedEditor.textContent;
-                    } else { editor.value = text; }
+                    } else {
+                        editor.value = text;
+                    }
                     updateLineNumbers();
                     compileShaderFromEditor();
                 } catch (err) { if (err.name !== 'AbortError') console.error(err); }
@@ -344,6 +341,7 @@ void main() {
         }
 
         // --- SHADER ENGINE ---
+
         function createShader(gl, type, source) {
             let processedSource = source;
             if (isWebGL2 && !source.trim().startsWith("#version 300 es")) {
@@ -375,19 +373,15 @@ void main() {
             gl.linkProgram(program);
             if (gl.getProgramParameter(program, gl.LINK_STATUS)) {
                 gl.useProgram(program);
-                // Reset time on re-compile
-                startTime = performance.now();
-                totalPausedTime = 0;
-                isPaused = false;
-                pausePlayBtn.textContent = "Pause";
-                pausePlayBtn.style.background = "#8957e5";
-                startSetup();
-            } else { console.error(gl.getProgramInfoLog(program)); }
+                startLoop();
+                console.log(`Linked (${isWebGL2 ? 'WebGL2' : 'WebGL1'})`);
+            } else {
+                console.error(gl.getProgramInfoLog(program));
+            }
         }
 
-        let uTimeLoc, uResLoc, vao;
-
-        function startSetup() {
+        function startLoop() {
+            let vao;
             if (isWebGL2) { vao = gl.createVertexArray(); gl.bindVertexArray(vao); }
             const posBuf = gl.createBuffer();
             gl.bindBuffer(gl.ARRAY_BUFFER, posBuf);
@@ -395,25 +389,19 @@ void main() {
             const posLoc = gl.getAttribLocation(program, "position");
             gl.enableVertexAttribArray(posLoc);
             gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
-            uTimeLoc = gl.getUniformLocation(program, "u_time");
-            uResLoc = gl.getUniformLocation(program, "u_resolution");
-            requestAnimationFrame(renderLoop);
-        }
-
-        function renderLoop(now) {
-            if (isPaused) return;
-
-            const effectiveTime = (now - startTime - totalPausedTime) * 0.001;
-
-            gl.viewport(0, 0, canvas.width, canvas.height);
-            gl.clear(gl.COLOR_BUFFER_BIT);
-            gl.uniform1f(uTimeLoc, effectiveTime);
-            gl.uniform2f(uResLoc, canvas.width, canvas.height);
-            if (isWebGL2) gl.bindVertexArray(vao);
-            gl.drawArrays(gl.TRIANGLES, 0, 6);
-            
-            console.update('gpu-stats', `Time: ${effectiveTime.toFixed(2)}s`);
-            animationId = requestAnimationFrame(renderLoop);
+            const tLoc = gl.getUniformLocation(program, "u_time");
+            const rLoc = gl.getUniformLocation(program, "u_resolution");
+            function render(time) {
+                gl.viewport(0, 0, canvas.width, canvas.height);
+                gl.clear(gl.COLOR_BUFFER_BIT);
+                gl.uniform1f(tLoc, time * 0.001);
+                gl.uniform2f(rLoc, canvas.width, canvas.height);
+                if (isWebGL2) gl.bindVertexArray(vao);
+                gl.drawArrays(gl.TRIANGLES, 0, 6);
+                console.update('gpu-stats', `${isWebGL2 ? 'WebGL2' : 'WebGL1'} | Time: ${(time/1000).toFixed(1)}s`);
+                animationId = requestAnimationFrame(render);
+            }
+            animationId = requestAnimationFrame(render);
         }
 
         updateLineNumbers();
