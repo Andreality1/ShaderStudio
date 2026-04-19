@@ -155,15 +155,38 @@
             <div id="line-numbers"></div>
             <textarea id="shaderEditor" spellcheck="false" 
                 oninput="updateLineNumbers()" 
-                onscroll="syncScroll()">precision mediump float;
+                onscroll="syncScroll()">#version 300 es
+precision mediump float;
+
 uniform float u_time;
 uniform vec2 u_resolution;
 
+// In WebGL 2.0, we declare our own output variable
+out vec4 outColor;
+
 void main() {
+    // Standardize coordinates (0.0 to 1.0)
     vec2 uv = gl_FragCoord.xy / u_resolution.xy; 
+    
+    // The rainbow math: 
+    // uv.xyx adds spatial variation so colors "flow" across the screen
     vec3 color = 0.5 + 0.5 * cos(u_time + uv.xyx + vec3(0, 2, 4));
-    gl_FragColor = vec4(color, 1.0);
-}</textarea>
+    
+    // Assign to our custom output instead of gl_FragColor
+    outColor = vec4(color, 1.0);
+}
+
+//precision mediump float;
+//uniform float u_time;
+//uniform vec2 u_resolution;
+//
+//void main() {
+//    vec2 uv = gl_FragCoord.xy / u_resolution.xy; 
+//    vec3 color = 0.5 + 0.5 * cos(u_time + uv.xyx + vec3(0, 2, 4));
+//    gl_FragColor = vec4(color, 1.0);
+//}
+
+</textarea>
         </div>
     </div>
 
