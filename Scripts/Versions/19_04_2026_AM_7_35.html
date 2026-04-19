@@ -116,11 +116,11 @@
         }
         button:hover { background: #2ea043; }
         button.secondary { background: #30363d; }
+        button.secondary:hover { background: #3c444d; }
         button.save { background: #1f6feb; }
         button.open { background: #6e7681; }
         button#pausePlayBtn { width: 100px; background: #8957e5; }
 
-        /* Terminal Output */
         #terminal-wrapper {
             width: 350px;
             display: flex;
@@ -159,7 +159,7 @@
             <span id="version-label">Hybrid Shader Studio</span>
             <div class="button-group">
                 <button class="open" title="Alt + J" onclick="openFile()">Open File (Alt+J)</button>
-                <button class="save" onclick="directDownloadTxt()">download.txt</button>
+                <button class="save" onclick="downloadTxt()">download.txt</button>
                 <button class="secondary" title="Alt + L" onclick="exportFullHtml()">Save As (Alt+L)</button>
                 <button id="runBtn" title="Alt + Enter" onclick="compileShaderFromEditor()">Run (Alt+Enter)</button>
             </div>
@@ -181,17 +181,6 @@ void main() {
     vec3 color = 0.5 + 0.5 * cos(u_time + uv.xyx + vec3(0, 2, 4));
     outColor = vec4(color, 1.0);
 }
-
-//precision mediump float;
-//uniform float u_time;
-//uniform vec2 u_resolution;
-//
-//void main() {
-//    vec2 uv = gl_FragCoord.xy / u_resolution.xy; 
-//    vec3 color = 0.5 + 0.5 * cos(u_time + uv.xyx + vec3(0, 2, 4));
-//    gl_FragColor = vec4(color, 1.0);
-//}
-
 </textarea>
         </div>
     </div>
@@ -233,10 +222,22 @@ void main() {
         let pausedAt = 0;
         let totalPausedTime = 0;
 
+        // Shortcuts
         window.addEventListener('keydown', (e) => {
             if (e.altKey && e.key === 'Enter') { e.preventDefault(); compileShaderFromEditor(); }
             if (e.altKey && e.key.toLowerCase() === 'l') { e.preventDefault(); exportFullHtml(); }
             if (e.altKey && e.key.toLowerCase() === 'j') { e.preventDefault(); openFile(); }
+        });
+
+        editor.addEventListener('keydown', function(e) {
+            if (e.key === 'Tab') {
+                e.preventDefault();
+                const start = this.selectionStart;
+                const end = this.selectionEnd;
+                this.value = this.value.substring(0, start) + "    " + this.value.substring(end);
+                this.selectionStart = this.selectionEnd = start + 4;
+                updateLineNumbers();
+            }
         });
 
         function updateLineNumbers() {
@@ -277,26 +278,34 @@ void main() {
             }
         }
 
-        // --- DIRECT DOWNLOAD (No Folder Selection) ---
-        function directDownloadTxt() {
+        // --- FIXED FILE SAVING FUNCTIONS ---
+
+        async function downloadTxt() {
+            if ('showSaveFilePicker' in window && window.location.protocol !== 'file:') {
+                try {
+                    const handle = await window.showSaveFilePicker({
+                        suggestedName: 'shader.txt',
+                        types: [{ description: 'Text File', accept: { 'text/plain': ['.txt'] } }]
+                    });
+                    const writable = await handle.createWritable();
+                    await writable.write(editor.value);
+                    await writable.close();
+                    return;
+                } catch (err) { if (err.name !== 'AbortError') console.error(err); }
+            }
+            // Universal Fallback
             const blob = new Blob([editor.value], { type: 'text/plain' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
-            a.href = url;
-            a.download = 'shader.txt'; // Forced filename, no explorer dialog
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
+            a.href = url; a.download = 'shader.txt'; a.click();
             URL.revokeObjectURL(url);
-            console.log("File downloaded to default location.");
         }
 
-        // --- SAVE AS (With Explorer Dialog) ---
         async function exportFullHtml() {
             editor.textContent = editor.value; 
             const content = "<!DOCTYPE html>\n" + document.documentElement.outerHTML;
-            try {
-                if ('showSaveFilePicker' in window) {
+            if ('showSaveFilePicker' in window && window.location.protocol !== 'file:') {
+                try {
                     const handle = await window.showSaveFilePicker({
                         suggestedName: 'ShaderStudio_Project.html',
                         types: [{ description: 'HTML Webpage', accept: { 'text/html': ['.html'] } }]
@@ -304,25 +313,22 @@ void main() {
                     const writable = await handle.createWritable();
                     await writable.write(content);
                     await writable.close();
-                } else {
-                    throw new Error('Picker not supported');
-                }
-            } catch (err) {
-                if (err.name === 'AbortError') return;
-                // Fallback direct download if blocked
-                const blob = new Blob([content], { type: 'text/html' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url; a.download = 'ShaderStudio_Project.html'; a.click();
-                URL.revokeObjectURL(url);
+                    return;
+                } catch (err) { if (err.name !== 'AbortError') console.error(err); }
             }
+            // Universal Fallback
+            const blob = new Blob([content], { type: 'text/html' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = 'ShaderStudio_Project.html'; a.click();
+            URL.revokeObjectURL(url);
         }
 
         async function openFile() {
-            try {
-                if ('showOpenFilePicker' in window) {
+            if ('showOpenFilePicker' in window && window.location.protocol !== 'file:') {
+                try {
                     const [handle] = await window.showOpenFilePicker({
-                        types: [{ description: 'Project Files', accept: { 'text/plain': ['.txt', '.glsl'], 'text/html': ['.html'] } }]
+                        types: [{ description: 'Files', accept: { 'text/plain': ['.txt', '.glsl'], 'text/html': ['.html'] } }]
                     });
                     const file = await handle.getFile();
                     const text = await file.text();
@@ -334,21 +340,19 @@ void main() {
                     } else { editor.value = text; }
                     updateLineNumbers();
                     compileShaderFromEditor();
-                } else {
-                    throw new Error('Picker not supported');
-                }
-            } catch (err) {
-                if (err.name === 'AbortError') return;
-                const input = document.createElement('input');
-                input.type = 'file';
-                input.onchange = e => {
-                    const file = e.target.files[0];
-                    const reader = new FileReader();
-                    reader.onload = ev => { editor.value = ev.target.result; updateLineNumbers(); compileShaderFromEditor(); };
-                    reader.readAsText(file);
-                };
-                input.click();
+                    return;
+                } catch (err) { if (err.name !== 'AbortError') console.error(err); }
             }
+            // Input fallback
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.onchange = e => {
+                const file = e.target.files[0];
+                const reader = new FileReader();
+                reader.onload = ev => { editor.value = ev.target.result; updateLineNumbers(); compileShaderFromEditor(); };
+                reader.readAsText(file);
+            };
+            input.click();
         }
 
         // --- SHADER ENGINE ---

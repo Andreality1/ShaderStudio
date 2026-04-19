@@ -159,7 +159,7 @@
             <span id="version-label">Hybrid Shader Studio</span>
             <div class="button-group">
                 <button class="open" title="Alt + J" onclick="openFile()">Open File (Alt+J)</button>
-                <button class="save" onclick="directDownloadTxt()">download.txt</button>
+                <button class="save" onclick="downloadTxt()">download.txt</button>
                 <button class="secondary" title="Alt + L" onclick="exportFullHtml()">Save As (Alt+L)</button>
                 <button id="runBtn" title="Alt + Enter" onclick="compileShaderFromEditor()">Run (Alt+Enter)</button>
             </div>
@@ -181,17 +181,6 @@ void main() {
     vec3 color = 0.5 + 0.5 * cos(u_time + uv.xyx + vec3(0, 2, 4));
     outColor = vec4(color, 1.0);
 }
-
-//precision mediump float;
-//uniform float u_time;
-//uniform vec2 u_resolution;
-//
-//void main() {
-//    vec2 uv = gl_FragCoord.xy / u_resolution.xy; 
-//    vec3 color = 0.5 + 0.5 * cos(u_time + uv.xyx + vec3(0, 2, 4));
-//    gl_FragColor = vec4(color, 1.0);
-//}
-
 </textarea>
         </div>
     </div>
@@ -277,25 +266,38 @@ void main() {
             }
         }
 
-        // --- DIRECT DOWNLOAD (No Folder Selection) ---
-        function directDownloadTxt() {
-            const blob = new Blob([editor.value], { type: 'text/plain' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'shader.txt'; // Forced filename, no explorer dialog
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-            console.log("File downloaded to default location.");
+        // --- ENHANCED SAVING WITH FORCED EXPLORER DIALOG ---
+
+        async function downloadTxt() {
+            try {
+                // Primary Method: Explorer Window
+                if ('showSaveFilePicker' in window) {
+                    const handle = await window.showSaveFilePicker({
+                        suggestedName: 'shader.txt',
+                        types: [{ description: 'Text File', accept: { 'text/plain': ['.txt'] } }]
+                    });
+                    const writable = await handle.createWritable();
+                    await writable.write(editor.value);
+                    await writable.close();
+                } else {
+                    throw new Error('Picker not supported');
+                }
+            } catch (err) {
+                if (err.name === 'AbortError') return;
+                // Fallback: Immediate Download
+                const blob = new Blob([editor.value], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url; a.download = 'shader.txt'; a.click();
+                URL.revokeObjectURL(url);
+            }
         }
 
-        // --- SAVE AS (With Explorer Dialog) ---
         async function exportFullHtml() {
             editor.textContent = editor.value; 
             const content = "<!DOCTYPE html>\n" + document.documentElement.outerHTML;
             try {
+                // Primary Method: Explorer Window
                 if ('showSaveFilePicker' in window) {
                     const handle = await window.showSaveFilePicker({
                         suggestedName: 'ShaderStudio_Project.html',
@@ -309,7 +311,7 @@ void main() {
                 }
             } catch (err) {
                 if (err.name === 'AbortError') return;
-                // Fallback direct download if blocked
+                // Fallback: Immediate Download
                 const blob = new Blob([content], { type: 'text/html' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
