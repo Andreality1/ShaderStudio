@@ -119,7 +119,7 @@
         button.secondary:hover { background: #3c444d; }
         button.save { background: #1f6feb; }
         button.open { background: #6e7681; }
-        button#pausePlayBtn { width: 120px; background: #8957e5; }
+        button#pausePlayBtn { width: 100px; background: #8957e5; }
 
         /* Terminal */
         #terminal-wrapper {
@@ -151,7 +151,7 @@
     <div id="canvas-container">
         <canvas id="shaderCanvas" width="720" height="360"></canvas>
         <div class="canvas-controls">
-            <button id="pausePlayBtn" onclick="togglePause()">Pause (Alt+S)</button>
+            <button id="pausePlayBtn" onclick="togglePause()">Pause</button>
         </div>
     </div>
 
@@ -240,7 +240,6 @@ void main() {
             if (e.altKey && e.key === 'Enter') { e.preventDefault(); compileShaderFromEditor(); }
             if (e.altKey && e.key.toLowerCase() === 'l') { e.preventDefault(); exportFullHtml(); }
             if (e.altKey && e.key.toLowerCase() === 'j') { e.preventDefault(); openFile(); }
-            if (e.altKey && e.key.toLowerCase() === 's') { e.preventDefault(); togglePause(); }
         });
 
         editor.addEventListener('keydown', function(e) {
@@ -283,11 +282,11 @@ void main() {
             isPaused = !isPaused;
             if (isPaused) {
                 pausedAt = performance.now();
-                pausePlayBtn.textContent = "Play (Alt+S)";
+                pausePlayBtn.textContent = "Play";
                 pausePlayBtn.style.background = "#238636";
             } else {
                 totalPausedTime += (performance.now() - pausedAt);
-                pausePlayBtn.textContent = "Pause (Alt+S)";
+                pausePlayBtn.textContent = "Pause";
                 pausePlayBtn.style.background = "#8957e5";
                 requestAnimationFrame(renderLoop);
             }
@@ -380,7 +379,7 @@ void main() {
                 startTime = performance.now();
                 totalPausedTime = 0;
                 isPaused = false;
-                pausePlayBtn.textContent = "Pause (Alt+S)";
+                pausePlayBtn.textContent = "Pause";
                 pausePlayBtn.style.background = "#8957e5";
                 startSetup();
             } else { console.error(gl.getProgramInfoLog(program)); }
@@ -422,5 +421,3 @@ void main() {
     </script>
 </body>
 </html>
-
-<!-- fkaj: -->
