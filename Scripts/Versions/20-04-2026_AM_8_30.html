@@ -116,11 +116,12 @@
         }
         button:hover { background: #2ea043; }
         button.secondary { background: #30363d; }
+        button.secondary:hover { background: #3c444d; }
         button.save { background: #1f6feb; }
         button.open { background: #6e7681; }
-        button#pausePlayBtn { width: 110px; background: #8957e5; }
+        button#pausePlayBtn { width: 120px; background: #8957e5; }
 
-        /* Terminal Output */
+        /* Terminal */
         #terminal-wrapper {
             width: 350px;
             display: flex;
@@ -150,7 +151,7 @@
     <div id="canvas-container">
         <canvas id="shaderCanvas" width="720" height="360"></canvas>
         <div class="canvas-controls">
-            <button id="pausePlayBtn" title="Alt + S" onclick="togglePause()">Pause (Alt+S)</button>
+            <button id="pausePlayBtn" onclick="togglePause()">Pause (Alt+S)</button>
         </div>
     </div>
 
@@ -159,7 +160,7 @@
             <span id="version-label">Hybrid Shader Studio</span>
             <div class="button-group">
                 <button class="open" title="Alt + J" onclick="openFile()">Open File (Alt+J)</button>
-                <button class="save" onclick="directDownloadTxt()">download.txt</button>
+                <button class="save" onclick="downloadTxt()">download.txt</button>
                 <button class="secondary" title="Alt + L" onclick="exportFullHtml()">Save As (Alt+L)</button>
                 <button id="runBtn" title="Alt + Enter" onclick="compileShaderFromEditor()">Run (Alt+Enter)</button>
             </div>
@@ -181,6 +182,18 @@ void main() {
     vec3 color = 0.5 + 0.5 * cos(u_time + uv.xyx + vec3(0, 2, 4));
     outColor = vec4(color, 1.0);
 }
+
+
+//precision mediump float;
+//uniform float u_time;
+//uniform vec2 u_resolution;
+//
+//void main() {
+//    vec2 uv = gl_FragCoord.xy / u_resolution.xy; 
+//    vec3 color = 0.5 + 0.5 * cos(u_time + uv.xyx + vec3(0, 2, 4));
+//    gl_FragColor = vec4(color, 1.0);
+//}
+
 </textarea>
         </div>
     </div>
@@ -215,19 +228,30 @@ void main() {
         }
 
         const registry = new Map();
-        let program, animationId, uTimeLoc, uResLoc, vao;
+        let program, animationId;
         
+        // Time tracking for Pause/Play
         let isPaused = false;
         let startTime = performance.now();
         let pausedAt = 0;
         let totalPausedTime = 0;
 
-        // --- UPDATED KEYBOARD SHORTCUTS ---
         window.addEventListener('keydown', (e) => {
             if (e.altKey && e.key === 'Enter') { e.preventDefault(); compileShaderFromEditor(); }
             if (e.altKey && e.key.toLowerCase() === 'l') { e.preventDefault(); exportFullHtml(); }
             if (e.altKey && e.key.toLowerCase() === 'j') { e.preventDefault(); openFile(); }
             if (e.altKey && e.key.toLowerCase() === 's') { e.preventDefault(); togglePause(); }
+        });
+
+        editor.addEventListener('keydown', function(e) {
+            if (e.key === 'Tab') {
+                e.preventDefault();
+                const start = this.selectionStart;
+                const end = this.selectionEnd;
+                this.value = this.value.substring(0, start) + "    " + this.value.substring(end);
+                this.selectionStart = this.selectionEnd = start + 4;
+                updateLineNumbers();
+            }
         });
 
         function updateLineNumbers() {
@@ -254,6 +278,7 @@ void main() {
         console.error = (...args) => { nativeConsole.error(...args); renderToUI(null, args.join(' '), 'error'); };
         console.update = (id, msg) => renderToUI(id, msg, 'update');
 
+        // --- PAUSE LOGIC ---
         function togglePause() {
             isPaused = !isPaused;
             if (isPaused) {
@@ -268,23 +293,26 @@ void main() {
             }
         }
 
-        function directDownloadTxt() {
-            const blob = new Blob([editor.value], { type: 'text/plain' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'shader.txt';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+        // --- FILE HANDLING ---
+        async function downloadTxt() {
+            if ('showSaveFilePicker' in window) {
+                try {
+                    const handle = await window.showSaveFilePicker({
+                        suggestedName: 'shader.txt',
+                        types: [{ description: 'Text File', accept: { 'text/plain': ['.txt'] } }]
+                    });
+                    const writable = await handle.createWritable();
+                    await writable.write(editor.value);
+                    await writable.close();
+                } catch (err) { if (err.name !== 'AbortError') console.error(err); }
+            }
         }
 
         async function exportFullHtml() {
             editor.textContent = editor.value; 
             const content = "<!DOCTYPE html>\n" + document.documentElement.outerHTML;
-            try {
-                if ('showSaveFilePicker' in window) {
+            if ('showSaveFilePicker' in window) {
+                try {
                     const handle = await window.showSaveFilePicker({
                         suggestedName: 'ShaderStudio_Project.html',
                         types: [{ description: 'HTML Webpage', accept: { 'text/html': ['.html'] } }]
@@ -292,24 +320,15 @@ void main() {
                     const writable = await handle.createWritable();
                     await writable.write(content);
                     await writable.close();
-                } else {
-                    throw new Error('Picker not supported');
-                }
-            } catch (err) {
-                if (err.name === 'AbortError') return;
-                const blob = new Blob([content], { type: 'text/html' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url; a.download = 'ShaderStudio_Project.html'; a.click();
-                URL.revokeObjectURL(url);
+                } catch (err) { if (err.name !== 'AbortError') console.error(err); }
             }
         }
 
         async function openFile() {
-            try {
-                if ('showOpenFilePicker' in window) {
+            if ('showOpenFilePicker' in window) {
+                try {
                     const [handle] = await window.showOpenFilePicker({
-                        types: [{ description: 'Project Files', accept: { 'text/plain': ['.txt', '.glsl'], 'text/html': ['.html'] } }]
+                        types: [{ description: 'Files', accept: { 'text/plain': ['.txt', '.glsl'], 'text/html': ['.html'] } }]
                     });
                     const file = await handle.getFile();
                     const text = await file.text();
@@ -321,23 +340,11 @@ void main() {
                     } else { editor.value = text; }
                     updateLineNumbers();
                     compileShaderFromEditor();
-                } else {
-                    throw new Error('Picker not supported');
-                }
-            } catch (err) {
-                if (err.name === 'AbortError') return;
-                const input = document.createElement('input');
-                input.type = 'file';
-                input.onchange = e => {
-                    const file = e.target.files[0];
-                    const reader = new FileReader();
-                    reader.onload = ev => { editor.value = ev.target.result; updateLineNumbers(); compileShaderFromEditor(); };
-                    reader.readAsText(file);
-                };
-                input.click();
+                } catch (err) { if (err.name !== 'AbortError') console.error(err); }
             }
         }
 
+        // --- SHADER ENGINE ---
         function createShader(gl, type, source) {
             let processedSource = source;
             if (isWebGL2 && !source.trim().startsWith("#version 300 es")) {
@@ -369,6 +376,7 @@ void main() {
             gl.linkProgram(program);
             if (gl.getProgramParameter(program, gl.LINK_STATUS)) {
                 gl.useProgram(program);
+                // Reset time on re-compile
                 startTime = performance.now();
                 totalPausedTime = 0;
                 isPaused = false;
@@ -377,6 +385,8 @@ void main() {
                 startSetup();
             } else { console.error(gl.getProgramInfoLog(program)); }
         }
+
+        let uTimeLoc, uResLoc, vao;
 
         function startSetup() {
             if (isWebGL2) { vao = gl.createVertexArray(); gl.bindVertexArray(vao); }
@@ -393,13 +403,16 @@ void main() {
 
         function renderLoop(now) {
             if (isPaused) return;
+
             const effectiveTime = (now - startTime - totalPausedTime) * 0.001;
+
             gl.viewport(0, 0, canvas.width, canvas.height);
             gl.clear(gl.COLOR_BUFFER_BIT);
             gl.uniform1f(uTimeLoc, effectiveTime);
             gl.uniform2f(uResLoc, canvas.width, canvas.height);
             if (isWebGL2) gl.bindVertexArray(vao);
             gl.drawArrays(gl.TRIANGLES, 0, 6);
+            
             console.update('gpu-stats', `Time: ${effectiveTime.toFixed(2)}s`);
             animationId = requestAnimationFrame(renderLoop);
         }
