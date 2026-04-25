@@ -355,6 +355,30 @@ void main() { gl_Position = vec4(position, 0.0, 1.0); }</script>
             animationId = requestAnimationFrame(renderLoop);
         }
 
+        // --- Keyboard Controls ---
+        
+        // Editor-specific handling (Tab and Escape)
+        editor.addEventListener('keydown', function(e) {
+            if (e.key === 'Tab') {
+                e.preventDefault(); // Don't shift focus
+                const start = this.selectionStart;
+                const end = this.selectionEnd;
+
+                // Insert 4 spaces
+                this.value = this.value.substring(0, start) + "    " + this.value.substring(end);
+
+                // Reset caret position
+                this.selectionStart = this.selectionEnd = start + 4;
+                updateLineNumbers();
+            }
+
+            if (e.key === 'Escape') {
+                this.blur(); // Unfocus the editor
+                console.update('status', "Editor unfocused");
+            }
+        });
+
+        // Global Shortcuts
         window.addEventListener('keydown', e => {
             if (e.altKey && e.key === 'Enter') compileShaderFromEditor();
             if (e.altKey && e.key.toLowerCase() === 's') { e.preventDefault(); togglePause(); }
