@@ -17,7 +17,7 @@
             overflow: hidden;
         }
 
-        /* --- Canvas Section --- */
+        /* --- Layout --- */
         #canvas-container {
             flex: 1.2; 
             display: flex;
@@ -38,7 +38,6 @@
 
         .canvas-controls { margin-top: 15px; }
 
-        /* --- Right Panel Layout --- */
         .right-panel {
             flex: 1;
             display: flex;
@@ -47,6 +46,7 @@
             overflow: hidden;
         }
 
+        /* --- Editor --- */
         #editor-wrapper {
             flex: 2; 
             display: flex;
@@ -115,10 +115,7 @@
             line-height: 1.5;
             white-space: pre;
             overflow-x: auto;
-            transition: opacity 0.2s;
         }
-
-        textarea:not(:focus) { opacity: 0.7; }
 
         /* --- Collapsible Terminal --- */
         #terminal-wrapper {
@@ -127,11 +124,11 @@
             flex-direction: column;
             background: #010409;
             overflow: hidden;
-            transition: flex 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            transition: flex 0.3s ease-in-out;
         }
 
         #terminal-wrapper.minimized {
-            flex: 0 0 40px; 
+            flex: 0 0 40px; /* Collapse to header height */
         }
 
         #terminal-wrapper .section-header {
@@ -154,17 +151,17 @@
             display: none;
         }
 
-        /* --- UI Components --- */
+        /* --- UI Elements --- */
         .button-group { display: flex; gap: 8px; }
         button {
             background: #30363d;
             color: white;
             border: none;
-            padding: 6px 12px;
+            padding: 6px 14px;
             border-radius: 4px;
             cursor: pointer;
             font-weight: bold;
-            font-size: 0.7rem;
+            font-size: 0.75rem;
             transition: background 0.2s;
         }
         
@@ -248,13 +245,14 @@ void main() { gl_Position = vec4(position, 0.0, 1.0); }</script>
         let totalPausedTime = 0;
         const registry = new Map();
 
-        // --- Terminal Management ---
+        // --- Terminal Logic ---
         function toggleTerminal() {
             termWrapper.classList.toggle('minimized');
             termIcon.textContent = termWrapper.classList.contains('minimized') ? '▲' : '▼';
         }
 
         function renderToUI(key, message, level = 'log') {
+            // Auto-expand on error
             if (level === 'error' && termWrapper.classList.contains('minimized')) {
                 toggleTerminal();
             }
@@ -278,14 +276,14 @@ void main() { gl_Position = vec4(position, 0.0, 1.0); }</script>
         console.error = (...args) => { nativeConsole.error(...args); renderToUI(null, args.join(' '), 'error'); };
         console.update = (id, msg) => renderToUI(id, msg, 'update');
 
-        // --- Editor Functions ---
+        // --- Editor Logic ---
         function syncScroll() { lineNumbers.scrollTop = editor.scrollTop; }
         function updateLineNumbers() {
             const lines = editor.value.split('\n');
             lineNumbers.innerHTML = lines.map((_, i) => i + 1).join('<br>');
         }
 
-        // --- Persistence ---
+        // --- File Management ---
         function downloadTxt() {
             const fileName = (filenameInput.value || 'shader') + '.txt';
             const blob = new Blob([editor.value], { type: 'text/plain' });
@@ -327,7 +325,7 @@ void main() { gl_Position = vec4(position, 0.0, 1.0); }</script>
             input.click();
         }
 
-        // --- WebGL Core ---
+        // --- Shader Engine ---
         function togglePause() {
             isPaused = !isPaused;
             pausePlayBtn.className = isPaused ? 'paused-state' : 'playing-state';
@@ -345,7 +343,7 @@ void main() { gl_Position = vec4(position, 0.0, 1.0); }</script>
             gl.shaderSource(shader, source);
             gl.compileShader(shader);
             if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-                console.error("COMPILE ERROR: " + gl.getShaderInfoLog(shader));
+                console.error("SHADER ERROR: " + gl.getShaderInfoLog(shader));
                 return null;
             }
             return shader;
@@ -400,7 +398,7 @@ void main() { gl_Position = vec4(position, 0.0, 1.0); }</script>
             animationId = requestAnimationFrame(renderLoop);
         }
 
-        // --- Controls & Keybindings ---
+        // --- Input Handling ---
         editor.addEventListener('keydown', function(e) {
             if (e.key === 'Tab') {
                 e.preventDefault();
@@ -408,10 +406,6 @@ void main() { gl_Position = vec4(position, 0.0, 1.0); }</script>
                 this.value = this.value.substring(0, start) + "    " + this.value.substring(this.selectionEnd);
                 this.selectionStart = this.selectionEnd = start + 4;
                 updateLineNumbers();
-            }
-            if (e.key === 'Escape') {
-                this.blur();
-                console.update('status', "Editor Blurred (Esc)");
             }
         });
 
@@ -422,6 +416,7 @@ void main() { gl_Position = vec4(position, 0.0, 1.0); }</script>
             if (e.altKey && e.key.toLowerCase() === 'l') { e.preventDefault(); exportFullHtml(); }
         });
 
+        // Initialize
         updateLineNumbers();
         if (gl) compileShaderFromEditor();
     </script>

@@ -17,6 +17,7 @@
             overflow: hidden;
         }
 
+        /* --- Canvas Section --- */
         #canvas-container {
             flex: 1.2; 
             display: flex;
@@ -37,12 +38,22 @@
 
         .canvas-controls { margin-top: 15px; }
 
-        #editor-wrapper {
+        /* --- Right Panel Layout --- */
+        .right-panel {
             flex: 1;
             display: flex;
             flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #editor-wrapper {
+            flex: 2; 
+            display: flex;
+            flex-direction: column;
             background: #0d1117;
-            border-right: 2px solid #30363d;
+            border-bottom: 2px solid #30363d;
+            transition: flex 0.3s ease-in-out;
         }
 
         .section-header {
@@ -56,6 +67,19 @@
             justify-content: space-between;
             align-items: center;
             border-bottom: 1px solid #30363d;
+            gap: 10px;
+        }
+
+        #filename-input {
+            background: #0d1117;
+            border: 1px solid #30363d;
+            color: #7ee787;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-family: inherit;
+            font-size: 0.75rem;
+            width: 120px;
+            outline: none;
         }
 
         .editor-container {
@@ -91,43 +115,66 @@
             line-height: 1.5;
             white-space: pre;
             overflow-x: auto;
+            transition: opacity 0.2s;
         }
 
+        textarea:not(:focus) { opacity: 0.7; }
+
+        /* --- Collapsible Terminal --- */
+        #terminal-wrapper {
+            flex: 1; 
+            display: flex;
+            flex-direction: column;
+            background: #010409;
+            overflow: hidden;
+            transition: flex 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        #terminal-wrapper.minimized {
+            flex: 0 0 40px; 
+        }
+
+        #terminal-wrapper .section-header {
+            cursor: pointer;
+            user-select: none;
+        }
+        
+        #terminal-wrapper .section-header:hover {
+            background: #1f242c;
+        }
+
+        #terminal { 
+            flex-grow: 1; 
+            padding: 10px;
+            overflow-y: auto; 
+            font-size: 0.8rem; 
+        }
+
+        #terminal-wrapper.minimized #terminal {
+            display: none;
+        }
+
+        /* --- UI Components --- */
         .button-group { display: flex; gap: 8px; }
         button {
             background: #30363d;
             color: white;
             border: none;
-            padding: 6px 14px;
+            padding: 6px 12px;
             border-radius: 4px;
             cursor: pointer;
             font-weight: bold;
-            font-size: 0.75rem;
+            font-size: 0.7rem;
             transition: background 0.2s;
         }
         
-        button.playing-state { background: #8957e5 !important; }
-        button.playing-state:hover { background: #a371f7 !important; }
-        button.paused-state { background: #238636 !important; }
-        button.paused-state:hover { background: #2ea043 !important; }
-        
-        button.save { background: #1f6feb; }
-        button.open { background: #6e7681; }
-        button.secondary { background: #30363d; }
+        button.playing-state { background: #8957e5; }
+        button.paused-state { background: #238636; }
         button#runBtn { background: #238636; }
 
-        #terminal-wrapper {
-            width: 350px;
-            display: flex;
-            flex-direction: column;
-            background: #010409;
-            padding: 10px;
-        }
-
-        #terminal { flex-grow: 1; overflow-y: auto; font-size: 0.8rem; }
         .log-entry { display: flex; margin-bottom: 4px; padding-left: 8px; font-family: monospace; border-left: 3px solid transparent; }
         .time { color: #484f58; margin-right: 10px; font-size: 0.7rem; }
-        .error { color: #ff7b72; border-left-color: #ff7b72; }
+        .error { color: #ff7b72; border-left-color: #ff7b72; background: rgba(255, 123, 114, 0.05); }
         .update { color: #7ee787; }
     </style>
 </head>
@@ -140,20 +187,24 @@
         </div>
     </div>
 
-    <div id="editor-wrapper">
-        <div class="section-header">
-            <span id="version-label">Hybrid Shader Studio</span>
-            <div class="button-group">
-                <button class="open" title="Alt + J" onclick="openFile()">Open File (Alt+J)</button>
-                <button class="save" onclick="downloadTxt()">download.txt</button>
-                <button class="secondary" title="Alt + L" onclick="exportFullHtml()">Save As (Alt+L)</button>
-                <button id="runBtn" onclick="compileShaderFromEditor()">Run (Alt+Enter)</button>
+    <div class="right-panel">
+        <div id="editor-wrapper">
+            <div class="section-header">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span>File:</span>
+                    <input type="text" id="filename-input" value="my_shader">
+                </div>
+                <div class="button-group">
+                    <button onclick="openFile()">Open (Alt+J)</button>
+                    <button style="background: #1f6feb;" onclick="downloadTxt()">Save .txt</button>
+                    <button onclick="exportFullHtml()">Export HTML (Alt+L)</button>
+                    <button id="runBtn" onclick="compileShaderFromEditor()">Run (Alt+Enter)</button>
+                </div>
             </div>
-        </div>
-        <div class="editor-container">
-            <div id="line-numbers"></div>
-            <textarea id="shaderEditor" spellcheck="false" oninput="updateLineNumbers()" onscroll="syncScroll()">#version 300 es
-precision mediump float;
+            <div class="editor-container">
+                <div id="line-numbers"></div>
+                <textarea id="shaderEditor" spellcheck="false" oninput="updateLineNumbers()" onscroll="syncScroll()">#version 300 es
+precision highp float;
 uniform float u_time;
 uniform vec2 u_resolution;
 out vec4 outColor;
@@ -163,12 +214,16 @@ void main() {
     vec3 color = 0.5 + 0.5 * cos(u_time + uv.xyx + vec3(0, 2, 4));
     outColor = vec4(color, 1.0);
 }</textarea>
+            </div>
         </div>
-    </div>
 
-    <div id="terminal-wrapper">
-        <div class="section-header">System Output</div>
-        <div id="terminal"></div>
+        <div id="terminal-wrapper">
+            <div class="section-header" onclick="toggleTerminal()">
+                <span>System Output</span>
+                <span id="term-status-icon">▼</span>
+            </div>
+            <div id="terminal"></div>
+        </div>
     </div>
 
     <script id="vertexShader" type="x-shader/x-vertex">#version 300 es
@@ -181,6 +236,9 @@ void main() { gl_Position = vec4(position, 0.0, 1.0); }</script>
         const terminal = document.getElementById('terminal');
         const lineNumbers = document.getElementById('line-numbers');
         const pausePlayBtn = document.getElementById('pausePlayBtn');
+        const filenameInput = document.getElementById('filename-input');
+        const termWrapper = document.getElementById('terminal-wrapper');
+        const termIcon = document.getElementById('term-status-icon');
         
         let gl = canvas.getContext('webgl2');
         let program, animationId;
@@ -188,19 +246,19 @@ void main() { gl_Position = vec4(position, 0.0, 1.0); }</script>
         let startTime = performance.now();
         let pausedAt = 0;
         let totalPausedTime = 0;
-
         const registry = new Map();
 
-        function syncScroll() { lineNumbers.scrollTop = editor.scrollTop; }
-
-        function updateLineNumbers() {
-            const lines = editor.value.split('\n');
-            lineNumbers.innerHTML = lines.map((_, i) => i + 1).join('<br>');
+        // --- Terminal Management ---
+        function toggleTerminal() {
+            termWrapper.classList.toggle('minimized');
+            termIcon.textContent = termWrapper.classList.contains('minimized') ? '▲' : '▼';
         }
 
-        const nativeConsole = { log: console.log, error: console.error };
-
         function renderToUI(key, message, level = 'log') {
+            if (level === 'error' && termWrapper.classList.contains('minimized')) {
+                toggleTerminal();
+            }
+
             if (key && registry.has(key)) {
                 const existing = registry.get(key);
                 const contentSpan = existing.querySelector('.content');
@@ -215,77 +273,69 @@ void main() { gl_Position = vec4(position, 0.0, 1.0); }</script>
             terminal.scrollTop = terminal.scrollHeight;
         }
 
-        console.log = (...args) => { 
-            nativeConsole.log(...args); 
-            renderToUI(null, args.join(' '), 'log'); 
-        };
-        console.error = (...args) => { 
-            nativeConsole.error(...args); 
-            renderToUI(null, args.join(' '), 'error'); 
-        };
+        const nativeConsole = { log: console.log, error: console.error };
+        console.log = (...args) => { nativeConsole.log(...args); renderToUI(null, args.join(' '), 'log'); };
+        console.error = (...args) => { nativeConsole.error(...args); renderToUI(null, args.join(' '), 'error'); };
         console.update = (id, msg) => renderToUI(id, msg, 'update');
 
-        async function downloadTxt() {
-            if ('showSaveFilePicker' in window) {
-                try {
-                    const handle = await window.showSaveFilePicker({
-                        suggestedName: 'shader.txt',
-                        types: [{ description: 'Text File', accept: { 'text/plain': ['.txt'] } }]
-                    });
-                    const writable = await handle.createWritable();
-                    await writable.write(editor.value);
-                    await writable.close();
-                } catch (err) { if (err.name !== 'AbortError') console.error(err.message); }
-            }
+        // --- Editor Functions ---
+        function syncScroll() { lineNumbers.scrollTop = editor.scrollTop; }
+        function updateLineNumbers() {
+            const lines = editor.value.split('\n');
+            lineNumbers.innerHTML = lines.map((_, i) => i + 1).join('<br>');
         }
 
-        async function exportFullHtml() {
-            editor.textContent = editor.value; 
+        // --- Persistence ---
+        function downloadTxt() {
+            const fileName = (filenameInput.value || 'shader') + '.txt';
+            const blob = new Blob([editor.value], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = fileName;
+            a.click(); URL.revokeObjectURL(url);
+        }
+
+        function exportFullHtml() {
+            const fileName = (filenameInput.value || 'ShaderProject') + '.html';
             const content = "<!DOCTYPE html>\n" + document.documentElement.outerHTML;
-            if ('showSaveFilePicker' in window) {
-                try {
-                    const handle = await window.showSaveFilePicker({
-                        suggestedName: 'ShaderStudio_Project.html',
-                        types: [{ description: 'HTML Webpage', accept: { 'text/html': ['.html'] } }]
-                    });
-                    const writable = await handle.createWritable();
-                    await writable.write(content);
-                    await writable.close();
-                } catch (err) { if (err.name !== 'AbortError') console.error(err.message); }
-            }
+            const blob = new Blob([content], { type: 'text/html' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = fileName;
+            a.click(); URL.revokeObjectURL(url);
         }
 
-        async function openFile() {
-            if ('showOpenFilePicker' in window) {
-                try {
-                    const [handle] = await window.showOpenFilePicker({
-                        types: [{ description: 'Files', accept: { 'text/plain': ['.txt', '.glsl'], 'text/html': ['.html'] } }]
-                    });
-                    const file = await handle.getFile();
-                    const text = await file.text();
-                    if (file.name.endsWith('.html')) {
-                        const parser = new DOMParser();
-                        const doc = parser.parseFromString(text, 'text/html');
-                        const savedEditor = doc.getElementById('shaderEditor');
-                        if (savedEditor) editor.value = savedEditor.value || savedEditor.textContent;
-                    } else { editor.value = text; }
-                    updateLineNumbers();
-                    compileShaderFromEditor();
-                } catch (err) { if (err.name !== 'AbortError') console.error(err.message); }
-            }
+        function openFile() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.txt,.glsl,.html';
+            input.onchange = async e => {
+                const file = e.target.files[0];
+                const text = await file.text();
+                filenameInput.value = file.name.replace(/\.[^/.]+$/, "");
+                if (file.name.endsWith('.html')) {
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(text, 'text/html');
+                    const savedEditor = doc.getElementById('shaderEditor');
+                    if (savedEditor) editor.value = savedEditor.value;
+                } else {
+                    editor.value = text;
+                }
+                updateLineNumbers();
+                compileShaderFromEditor();
+            };
+            input.click();
         }
 
+        // --- WebGL Core ---
         function togglePause() {
             isPaused = !isPaused;
-            pausePlayBtn.classList.remove('playing-state', 'paused-state');
+            pausePlayBtn.className = isPaused ? 'paused-state' : 'playing-state';
+            pausePlayBtn.textContent = isPaused ? "Play (Alt+S)" : "Pause (Alt+S)";
             if (isPaused) {
                 pausedAt = performance.now();
-                pausePlayBtn.textContent = "Play (Alt+S)";
-                pausePlayBtn.classList.add('paused-state');
             } else {
                 totalPausedTime += (performance.now() - pausedAt);
-                pausePlayBtn.textContent = "Pause (Alt+S)";
-                pausePlayBtn.classList.add('playing-state');
                 requestAnimationFrame(renderLoop);
             }
         }
@@ -295,7 +345,7 @@ void main() { gl_Position = vec4(position, 0.0, 1.0); }</script>
             gl.shaderSource(shader, source);
             gl.compileShader(shader);
             if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-                console.error(gl.getShaderInfoLog(shader));
+                console.error("COMPILE ERROR: " + gl.getShaderInfoLog(shader));
                 return null;
             }
             return shader;
@@ -309,13 +359,14 @@ void main() { gl_Position = vec4(position, 0.0, 1.0); }</script>
             
             if (!vs || !fs) return;
 
+            if (program) gl.deleteProgram(program);
             program = gl.createProgram();
             gl.attachShader(program, vs);
             gl.attachShader(program, fs);
             gl.linkProgram(program);
 
             if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-                console.error(gl.getProgramInfoLog(program));
+                console.error("LINK ERROR: " + gl.getProgramInfoLog(program));
                 return;
             }
 
@@ -323,9 +374,6 @@ void main() { gl_Position = vec4(position, 0.0, 1.0); }</script>
             startTime = performance.now();
             totalPausedTime = 0;
             isPaused = false;
-            pausePlayBtn.textContent = "Pause (Alt+S)";
-            pausePlayBtn.classList.remove('paused-state');
-            pausePlayBtn.classList.add('playing-state');
             
             const buffer = gl.createBuffer();
             gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
@@ -343,42 +391,30 @@ void main() { gl_Position = vec4(position, 0.0, 1.0); }</script>
             if (isPaused) return;
             const time = (now - startTime - totalPausedTime) * 0.001;
             gl.viewport(0, 0, canvas.width, canvas.height);
-            
             const uTime = gl.getUniformLocation(program, "u_time");
             const uRes = gl.getUniformLocation(program, "u_resolution");
-            
             if(uTime) gl.uniform1f(uTime, time);
             if(uRes) gl.uniform2f(uRes, canvas.width, canvas.height);
-            
             gl.drawArrays(gl.TRIANGLES, 0, 6);
             console.update('gpu-stats', `Time: ${time.toFixed(2)}s`);
             animationId = requestAnimationFrame(renderLoop);
         }
 
-        // --- Keyboard Controls ---
-        
-        // Editor-specific handling (Tab and Escape)
+        // --- Controls & Keybindings ---
         editor.addEventListener('keydown', function(e) {
             if (e.key === 'Tab') {
-                e.preventDefault(); // Don't shift focus
+                e.preventDefault();
                 const start = this.selectionStart;
-                const end = this.selectionEnd;
-
-                // Insert 4 spaces
-                this.value = this.value.substring(0, start) + "    " + this.value.substring(end);
-
-                // Reset caret position
+                this.value = this.value.substring(0, start) + "    " + this.value.substring(this.selectionEnd);
                 this.selectionStart = this.selectionEnd = start + 4;
                 updateLineNumbers();
             }
-
             if (e.key === 'Escape') {
-                this.blur(); // Unfocus the editor
-                console.update('status', "Editor unfocused");
+                this.blur();
+                console.update('status', "Editor Blurred (Esc)");
             }
         });
 
-        // Global Shortcuts
         window.addEventListener('keydown', e => {
             if (e.altKey && e.key === 'Enter') compileShaderFromEditor();
             if (e.altKey && e.key.toLowerCase() === 's') { e.preventDefault(); togglePause(); }
