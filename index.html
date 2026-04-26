@@ -408,6 +408,11 @@ void main() { gl_Position = vec4(position, 0.0, 1.0); }</script>
         });
 
         window.addEventListener('keydown', e => {
+            // Escape key to remove focus from the text editor
+            if (e.key === 'Escape') {
+                editor.blur();
+            }
+
             if (e.altKey && e.key === 'Enter') compileShaderFromEditor();
             if (e.altKey && e.key.toLowerCase() === 's') { e.preventDefault(); togglePause(); }
             if (e.altKey && e.key.toLowerCase() === 'j') { e.preventDefault(); openFile(); }
