@@ -14,7 +14,7 @@
             flex-direction: row; 
             height: 100vh;
             width: 100vw;
-            overflow: hidden;
+            overflow: hidden; /* Prevents whole page scroll */
         }
 
         /* --- Canvas Section --- */
@@ -44,19 +44,20 @@
             display: flex;
             flex-direction: column;
             height: 100vh;
-            overflow: hidden;
+            overflow: hidden; /* Lock the panel */
         }
 
         #editor-wrapper {
-            flex: 2; 
+            flex: 1; 
             display: flex;
             flex-direction: column;
             background: #0d1117;
             border-bottom: 2px solid #30363d;
-            transition: flex 0.3s ease-in-out;
+            min-height: 0; /* CRITICAL: Allows container to be smaller than the text */
         }
 
         .section-header {
+            flex-shrink: 0; /* Prevents header from squishing */
             background: #161b22;
             padding: 10px;
             font-size: 0.75rem;
@@ -68,6 +69,7 @@
             align-items: center;
             border-bottom: 1px solid #30363d;
             gap: 10px;
+            z-index: 10;
         }
 
         #filename-input {
@@ -84,8 +86,8 @@
 
         .editor-container {
             display: flex;
-            flex-grow: 1;
-            overflow: hidden;
+            flex: 1;
+            overflow: hidden; /* Keeps scrollbars inside children */
             position: relative;
         }
 
@@ -99,11 +101,11 @@
             line-height: 1.5;
             user-select: none;
             border-right: 1px solid #30363d;
-            overflow: hidden;
+            overflow: hidden; /* Synced via JS */
         }
 
         textarea {
-            flex-grow: 1;
+            flex: 1;
             background: transparent;
             color: #d2a8ff;
             border: none;
@@ -114,44 +116,33 @@
             outline: none;
             line-height: 1.5;
             white-space: pre;
-            overflow-x: auto;
+            overflow: auto; /* Enables scrollbars here */
             transition: opacity 0.2s;
         }
 
-        textarea:not(:focus) { opacity: 0.7; }
+        textarea:not(:focus) { opacity: 0.8; }
 
         /* --- Collapsible Terminal --- */
         #terminal-wrapper {
-            flex: 1; 
+            flex: 0 0 30%; /* Start at 30% height */
             display: flex;
             flex-direction: column;
             background: #010409;
             overflow: hidden;
             transition: flex 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            min-height: 40px; 
         }
 
         #terminal-wrapper.minimized {
             flex: 0 0 40px; 
         }
 
-        #terminal-wrapper .section-header {
-            cursor: pointer;
-            user-select: none;
-        }
-        
-        #terminal-wrapper .section-header:hover {
-            background: #1f242c;
-        }
-
         #terminal { 
-            flex-grow: 1; 
+            flex: 1; 
             padding: 10px;
             overflow-y: auto; 
             font-size: 0.8rem; 
-        }
-
-        #terminal-wrapper.minimized #terminal {
-            display: none;
+            background: #050505;
         }
 
         /* --- UI Components --- */
@@ -165,16 +156,17 @@
             cursor: pointer;
             font-weight: bold;
             font-size: 0.7rem;
-            transition: background 0.2s;
+            white-space: nowrap;
         }
         
+        button:hover { background: #484f58; }
         button.playing-state { background: #8957e5; }
         button.paused-state { background: #238636; }
         button#runBtn { background: #238636; }
 
         .log-entry { display: flex; margin-bottom: 4px; padding-left: 8px; font-family: monospace; border-left: 3px solid transparent; }
         .time { color: #484f58; margin-right: 10px; font-size: 0.7rem; }
-        .error { color: #ff7b72; border-left-color: #ff7b72; background: rgba(255, 123, 114, 0.05); }
+        .error { color: #ff7b72; border-left-color: #ff7b72; background: rgba(255, 123, 114, 0.1); }
         .update { color: #7ee787; }
     </style>
 </head>
@@ -218,7 +210,7 @@ void main() {
         </div>
 
         <div id="terminal-wrapper">
-            <div class="section-header" onclick="toggleTerminal()">
+            <div class="section-header" onclick="toggleTerminal()" style="cursor: pointer;">
                 <span>System Output</span>
                 <span id="term-status-icon">▼</span>
             </div>
@@ -273,16 +265,19 @@ void main() { gl_Position = vec4(position, 0.0, 1.0); }</script>
             terminal.scrollTop = terminal.scrollHeight;
         }
 
-        const nativeConsole = { log: console.log, error: console.error };
-        console.log = (...args) => { nativeConsole.log(...args); renderToUI(null, args.join(' '), 'log'); };
-        console.error = (...args) => { nativeConsole.error(...args); renderToUI(null, args.join(' '), 'error'); };
+        console.log = (...args) => renderToUI(null, args.join(' '), 'log');
+        console.error = (...args) => renderToUI(null, args.join(' '), 'error');
         console.update = (id, msg) => renderToUI(id, msg, 'update');
 
         // --- Editor Functions ---
-        function syncScroll() { lineNumbers.scrollTop = editor.scrollTop; }
+        function syncScroll() { 
+            lineNumbers.scrollTop = editor.scrollTop; 
+        }
+        
         function updateLineNumbers() {
             const lines = editor.value.split('\n');
             lineNumbers.innerHTML = lines.map((_, i) => i + 1).join('<br>');
+            syncScroll();
         }
 
         // --- Persistence ---
@@ -311,6 +306,7 @@ void main() { gl_Position = vec4(position, 0.0, 1.0); }</script>
             input.accept = '.txt,.glsl,.html';
             input.onchange = async e => {
                 const file = e.target.files[0];
+                if(!file) return;
                 const text = await file.text();
                 filenameInput.value = file.name.replace(/\.[^/.]+$/, "");
                 if (file.name.endsWith('.html')) {
@@ -409,10 +405,6 @@ void main() { gl_Position = vec4(position, 0.0, 1.0); }</script>
                 this.selectionStart = this.selectionEnd = start + 4;
                 updateLineNumbers();
             }
-            if (e.key === 'Escape') {
-                this.blur();
-                console.update('status', "Editor Blurred (Esc)");
-            }
         });
 
         window.addEventListener('keydown', e => {
@@ -422,6 +414,7 @@ void main() { gl_Position = vec4(position, 0.0, 1.0); }</script>
             if (e.altKey && e.key.toLowerCase() === 'l') { e.preventDefault(); exportFullHtml(); }
         });
 
+        // Initialize
         updateLineNumbers();
         if (gl) compileShaderFromEditor();
     </script>
